@@ -1,0 +1,159 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from binance.client import Client
+from sklearn.ensemble import RandomForestClassifier
+import plotly.graph_objects as go
+
+# =========================
+# CONFIG
+# =========================
+st.set_page_config(page_title="AI Trader Pro", layout="wide")
+
+API_KEY = "SUA_API_KEY"
+API_SECRET = "SUA_API_SECRET"
+
+client = Client(API_KEY, API_SECRET)
+
+# =========================
+# PEGAR DADOS REAIS
+# =========================
+def pegar_dados():
+    klines = client.get_klines(symbol="BTCUSDT", interval="1m", limit=200)
+
+    df = pd.DataFrame(klines, columns=[
+        "time","open","high","low","close","volume",
+        "close_time","qav","trades","tbav","tqav","ignore"
+    ])
+
+    df["open"] = df["open"].astype(float)
+    df["high"] = df["high"].astype(float)
+    df["low"] = df["low"].astype(float)
+    df["close"] = df["close"].astype(float)
+
+    return df
+
+# =========================
+# PADRÕES
+# =========================
+def detectar_padroes(df):
+    df["doji"] = abs(df["open"] - df["close"]) < (df["high"] - df["low"]) * 0.1
+
+    df["martelo"] = (
+        (df["close"] > df["open"]) &
+        ((df["low"] < df["open"] - (df["high"] - df["low"]) * 0.6))
+    )
+
+    df["engolfo"] = (
+        (df["close"] > df["open"]) &
+        (df["close"].shift(1) < df["open"].shift(1)) &
+        (df["close"] > df["open"].shift(1)) &
+        (df["open"] < df["close"].shift(1))
+    )
+
+    return df
+
+# =========================
+# IA
+# =========================
+def treinar_modelo(df):
+    df = df.dropna()
+
+    df["target"] = (df["close"].shift(-1) > df["close"]).astype(int)
+
+    X = df[["open", "high", "low", "close"]]
+    y = df["target"]
+
+    model = RandomForestClassifier()
+    model.fit(X, y)
+
+    return model
+
+def prever(model, df):
+    ultima = df[["open", "high", "low", "close"]].iloc[-1:]
+    pred = model.predict(ultima)[0]
+    return "COMPRA" if pred == 1 else "VENDA"
+
+# =========================
+# ORDEM
+# =========================
+def comprar():
+    try:
+        order = client.create_order(
+            symbol="BTCUSDT",
+            side="BUY",
+            type="MARKET",
+            quantity=0.001
+        )
+        return "Ordem de COMPRA executada!"
+    except Exception as e:
+        return str(e)
+
+def vender():
+    try:
+        order = client.create_order(
+            symbol="BTCUSDT",
+            side="SELL",
+            type="MARKET",
+            quantity=0.001
+        )
+        return "Ordem de VENDA executada!"
+    except Exception as e:
+        return str(e)
+
+# =========================
+# GRÁFICO
+# =========================
+def plotar(df):
+    fig = go.Figure(data=[
+        go.Candlestick(
+            x=df.index,
+            open=df["open"],
+            high=df["high"],
+            low=df["low"],
+            close=df["close"]
+        )
+    ])
+    return fig
+
+# =========================
+# APP
+# =========================
+st.title(" AI Trader PRO (com Binance)")
+st.markdown("Sistema inteligente com IA + Execução real de ordens")
+
+df = pegar_dados()
+df = detectar_padroes(df)
+
+model = treinar_modelo(df)
+sinal = prever(model, df)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Mercado BTC/USDT")
+    st.plotly_chart(plotar(df), use_container_width=True)
+
+with col2:
+    st.subheader(" Sinal da IA")
+
+    if sinal == "COMPRA":
+        st.success("COMPRA")
+    else:
+        st.error("VENDA")
+
+    st.subheader("Executar Ordem")
+
+    if st.button("COMPRAR"):
+        resultado = comprar()
+        st.write(resultado)
+
+    if st.button("VENDER"):
+        resultado = vender()
+        st.write(resultado)
+
+    st.subheader(" Padrões detectados")
+    st.write(df[["doji", "martelo", "engolfo"]].tail())
+
+st.markdown("---")
+st.markdown("Desenvolvido por Danilo Yamane ")
