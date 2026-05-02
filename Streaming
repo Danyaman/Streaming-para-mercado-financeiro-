@@ -5,9 +5,9 @@ from binance.client import Client
 from sklearn.ensemble import RandomForestClassifier
 import plotly.graph_objects as go
 
-# =========================
-# CONFIG
-# =========================
+
+
+
 st.set_page_config(page_title="AI Trader Pro", layout="wide")
 
 API_KEY = "SUA_API_KEY"
@@ -15,9 +15,9 @@ API_SECRET = "SUA_API_SECRET"
 
 client = Client(API_KEY, API_SECRET)
 
-# =========================
+
 # PEGAR DADOS REAIS
-# =========================
+
 def pegar_dados():
     klines = client.get_klines(symbol="BTCUSDT", interval="1m", limit=200)
 
